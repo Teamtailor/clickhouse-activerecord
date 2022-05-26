@@ -278,6 +278,7 @@ module ActiveRecord
       # Create a new ClickHouse database.
       def create_database(name)
         sql = apply_cluster "CREATE DATABASE #{quote_table_name(name)}"
+        sql = apply_replicated_database_engine sql
         log_with_debug(sql, adapter_name) do
           res = @connection.post("/?#{@config.except(:database).to_param}", sql)
           process_response(res)
@@ -364,12 +365,16 @@ module ActiveRecord
         @full_config[:replica_name]
       end
 
+      def replicated_database_engine?
+        @full_config[:database_engine].presence == 'replicated'
+      end
+
       def use_default_replicated_merge_tree_params?
-        database_engine_atomic? && @full_config[:use_default_replicated_merge_tree_params]
+        (replicated_database_engine? || database_engine_atomic?) && @full_config[:use_default_replicated_merge_tree_params]
       end
 
       def use_replica?
-        (replica || use_default_replicated_merge_tree_params?) && cluster
+        (replica || use_default_replicated_merge_tree_params?) && (cluster || replicated_database_engine?)
       end
 
       def replica_path(table)
@@ -384,6 +389,10 @@ module ActiveRecord
 
       def apply_cluster(sql)
         cluster ? "#{sql} ON CLUSTER #{cluster}" : sql
+      end
+
+      def apply_replicated_database_engine(sql)
+        replicated_database_engine? ? "#{sql} ENGINE=Replicated('#{@full_config[:zoo_path]}', '{shard}', '{replica}')" : sql
       end
 
       def supports_insert_on_duplicate_skip?
@@ -427,7 +436,7 @@ module ActiveRecord
       end
 
       def apply_replica(table, options)
-        if use_replica? && options[:options]
+        if use_replica? && options[:options] && !replicated_database_engine?
           if options[:options].match(/^Replicated/)
             raise 'Do not try create Replicated table. It will be configured based on the *MergeTree engine.'
           end
