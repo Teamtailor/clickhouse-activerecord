@@ -51,7 +51,12 @@ module ActiveRecord
     def reverse_order!
       return super unless connection.is_a?(ConnectionAdapters::ClickhouseAdapter)
 
-      orders = order_values.uniq.compact_blank
+      if ActiveSupport::version >= Gem::Version.new('6.1')
+        orders = order_values.uniq.compact_blank
+      else
+        orders = order_values.uniq
+        orders.reject!(&:blank?)
+      end
       return super unless orders.empty? && !primary_key
 
       self.order_values = %w(date created_at).select {|c| column_names.include?(c) }.map{|c| arel_attribute(c).desc }
