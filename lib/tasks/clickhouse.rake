@@ -41,28 +41,28 @@ namespace :clickhouse do
   namespace :structure do
     desc 'Load database structure'
     task load: [:load_config, 'db:check_protected_environments'] do
-      ClickhouseActiverecord::Tasks.new(ActiveRecord::Base.configs_for("#{Rails.env}_clickhouse")).structure_load("#{Rails.root}/db/clickhouse_structure.sql")
+      ClickhouseActiverecord::Tasks.new(Rails.application.config_for(:database, env: "#{Rails.env}_clickhouse")).structure_load("#{Rails.root}/db/clickhouse_structure.sql")
     end
 
     desc 'Dump database structure'
     task dump: [:load_config, 'db:check_protected_environments'] do
-      ClickhouseActiverecord::Tasks.new(ActiveRecord::Base.configs_for("#{Rails.env}_clickhouse")).structure_dump("#{Rails.root}/db/clickhouse_structure.sql")
+      ClickhouseActiverecord::Tasks.new(Rails.application.config_for(:database, env: "#{Rails.env}_clickhouse")).structure_dump("#{Rails.root}/db/clickhouse_structure.sql")
     end
   end
 
   desc 'Creates the database from DATABASE_URL or config/database.yml'
   task create: [:load_config] do
-    ActiveRecord::Tasks::DatabaseTasks.create(ActiveRecord::Base.configs_for("#{Rails.env}_clickhouse"))
+    ActiveRecord::Tasks::DatabaseTasks.create(Rails.application.config_for(:database, env: "#{Rails.env}_clickhouse"))
   end
 
   desc 'Drops the database from DATABASE_URL or config/database.yml'
   task drop: [:load_config, 'db:check_protected_environments'] do
-    ActiveRecord::Tasks::DatabaseTasks.drop(ActiveRecord::Base.configs_for("#{Rails.env}_clickhouse"))
+    ActiveRecord::Tasks::DatabaseTasks.drop(Rails.application.config_for(:database, env: "#{Rails.env}_clickhouse"))
   end
 
   desc 'Empty the database from DATABASE_URL or config/database.yml'
   task purge: [:load_config, 'db:check_protected_environments'] do
-    ActiveRecord::Tasks::DatabaseTasks.purge(ActiveRecord::Base.configs_for("#{Rails.env}_clickhouse"))
+    ActiveRecord::Tasks::DatabaseTasks.purge(Rails.application.config_for(:database, env: "#{Rails.env}_clickhouse"))
   end
 
   # desc 'Resets your database using your migrations for the current environment'
