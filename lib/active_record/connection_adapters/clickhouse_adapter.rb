@@ -11,7 +11,6 @@ require 'active_record/connection_adapters/clickhouse/schema_definitions'
 require 'active_record/connection_adapters/clickhouse/schema_creation'
 require 'active_record/connection_adapters/clickhouse/schema_statements'
 require 'net/http'
-require 'openssl'
 
 module ActiveRecord
   class Base
@@ -48,6 +47,24 @@ module ActiveRecord
     end
   end
 
+  module ClickhouseRelationReverseOrder
+    def reverse_order!
+      return super unless connection.is_a?(ConnectionAdapters::ClickhouseAdapter)
+
+      if ActiveSupport::version >= Gem::Version.new('6.1')
+        orders = order_values.uniq.compact_blank
+      else
+        orders = order_values.uniq
+        orders.reject!(&:blank?)
+      end
+      return super unless orders.empty? && !primary_key
+
+      self.order_values = %w(date created_at).select {|c| column_names.include?(c) }.map{|c| arel_attribute(c).desc }
+      self
+    end
+  end
+  Relation.prepend(ClickhouseRelationReverseOrder)
+
   module TypeCaster
     class Map
       def is_view
@@ -61,7 +78,7 @@ module ActiveRecord
   end
 
   module ModelSchema
-    module ClassMethods
+     module ClassMethods
       def is_view
         @is_view || false
       end
@@ -92,7 +109,7 @@ module ActiveRecord
         datetime: { name: 'DateTime' },
         datetime64: { name: 'DateTime64' },
         date: { name: 'Date' },
-        boolean: { name: 'Bool' },
+        boolean: { name: 'UInt8' },
         uuid: { name: 'UUID' },
 
         enum8: { name: 'Enum8' },
@@ -191,7 +208,7 @@ module ActiveRecord
         super
         register_class_with_limit m, %r(String), Type::String
         register_class_with_limit m, 'Date',  Clickhouse::OID::Date
-        register_class_with_precision m, %r(datetime)i,  Clickhouse::OID::DateTime
+        register_class_with_limit m, 'DateTime',  Clickhouse::OID::DateTime
 
         register_class_with_limit m, %r(Int8), Type::Integer
         register_class_with_limit m, %r(Int16), Type::Integer
@@ -209,15 +226,6 @@ module ActiveRecord
         # register_class_with_limit m, %r(Array), Clickhouse::OID::Array
         m.register_type(%r(Array)) do |sql_type|
           Clickhouse::OID::Array.new(sql_type)
-        end
-      end
-
-      def _quote(value)
-        case value
-        when Array
-          '[' + value.map { |v| _quote(v) }.join(', ') + ']'
-        else
-          super
         end
       end
 
@@ -299,7 +307,6 @@ module ActiveRecord
         options = apply_replica(table_name, options)
         td = create_table_definition(apply_cluster(table_name), **options)
         block.call td if block_given?
-        td.column(:id, options[:id], null: false) if options[:id].present? && td[:id].blank?
 
         if options[:force]
           drop_table(table_name, options.merge(if_exists: true))
@@ -340,26 +347,8 @@ module ActiveRecord
         end
       end
 
-      def add_column(table_name, column_name, type, **options)
-        return if options[:if_not_exists] == true && column_exists?(table_name, column_name, type)
-
-        at = create_alter_table table_name
-        at.add_column(column_name, type, **options)
-        execute(schema_creation.accept(at), nil, settings: {wait_end_of_query: 1, send_progress_in_http_headers: 1})
-      end
-
-      def remove_column(table_name, column_name, type = nil, **options)
-        return if options[:if_exists] == true && !column_exists?(table_name, column_name)
-
-        execute("ALTER TABLE #{quote_table_name(table_name)} #{remove_column_for_alter(table_name, column_name, type, **options)}", nil, settings: {wait_end_of_query: 1, send_progress_in_http_headers: 1})
-      end
-
       def change_column(table_name, column_name, type, options = {})
-        result = do_execute(
-          "ALTER TABLE #{quote_table_name(table_name)} #{change_column_for_alter(table_name, column_name, type, options)}",
-          nil,
-          settings: {wait_end_of_query: 1, send_progress_in_http_headers: 1}
-        )
+        result = do_execute "ALTER TABLE #{quote_table_name(table_name)} #{change_column_for_alter(table_name, column_name, type, options)}"
         raise "Error parse json response: #{result}" if result.presence && !result.is_a?(Hash)
       end
 

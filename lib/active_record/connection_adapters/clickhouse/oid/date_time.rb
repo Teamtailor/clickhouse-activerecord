@@ -9,8 +9,9 @@ module ActiveRecord
           def serialize(value)
             value = super
             return unless value
-            
-            value.strftime('%Y-%m-%d %H:%M:%S' + (@precision.present? && @precision > 0 ? ".%#{@precision}N" : ''))
+            return value.strftime('%Y-%m-%d %H:%M:%S') unless value.acts_like?(:time)
+
+            value.to_time.strftime('%Y-%m-%d %H:%M:%S')
           end
 
           def type_cast_from_database(value)
