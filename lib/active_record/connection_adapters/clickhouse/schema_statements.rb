@@ -30,12 +30,14 @@ module ActiveRecord
           true
         end
 
-        def exec_update(_sql, _name = nil, _binds = [])
-          raise ActiveRecord::ActiveRecordError, 'Clickhouse update is not supported'
+        def exec_update(sql, name = nil, _binds = [])
+          do_execute(sql, name, format: nil)
+          true
         end
 
-        def exec_delete(_sql, _name = nil, _binds = [])
-          raise ActiveRecord::ActiveRecordError, 'Clickhouse delete is not supported'
+        def exec_delete(sql, name = nil, binds = [])
+          do_execute(sql, name, format: nil)
+          true
         end
 
         def tables(name = nil)
